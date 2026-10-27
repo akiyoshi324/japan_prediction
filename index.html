@@ -79,8 +79,8 @@
         <h1>観測地点の登録</h1>
         <p>選択した「観測地点ID」をコピーし、Googleフォームで送信してください</p>
         <div class="btn-group">
-            <button class="btn-success" onclick="copyToClipboard()">選択した観測地点IDをコピー</button>
-            <button id="btnGoogleForm" class="btn-outline" onclick="openGoogleForm()" disabled>Googleフォームへ送信（外部リンク）</button>
+            <button class="btn-success" onclick="copyToClipboard()">1. 選択した観測地点IDをコピー</button>
+            <button id="btnGoogleForm" class="btn-outline" onclick="openGoogleForm()" disabled>2. Googleフォームへ送信</button>
             </button>
         </div>
 
@@ -225,7 +225,7 @@ function updateSelectedSummary() {
     hasCopied = false;
     const formBtn = document.getElementById('btnGoogleForm');
     formBtn.disabled = true;
-    formBtn.innerText = "Googleフォームへ送信（外部リンク）";
+    formBtn.innerText = "2. Googleフォームへ送信";
 }
 
 // 8. クリップボードへのコピー実行時

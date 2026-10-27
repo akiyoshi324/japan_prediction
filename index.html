@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>観測地点 検索・選択ツール</title>
+    <!-- PapaParse (CSV読み込み用) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 20px; background-color: #f8f9fa; color: #333; }
+        .container { max-width: 1100px; margin: 0 auto; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        h1 { margin-top: 0; font-size: 1.5rem; color: #1a252f; border-bottom: 2px solid #007bff; padding-bottom: 8px; }
+        .search-box { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .search-box input { flex: 1; min-width: 200px; padding: 10px; border: 1px solid #ced4da; border-radius: 6px; font-size: 1rem; }
+        .stats { margin-bottom: 15px; font-weight: bold; font-size: 0.95rem; color: #495057; }
+        .table-container { max-height: 450px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 6px; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        th, td { border-bottom: 1px solid #dee2e6; padding: 10px; text-align: left; }
+        th { background-color: #e9ecef; position: sticky; top: 0; z-index: 1; }
+        tr:hover { background-color: #f1f3f5; }
+        
+        .action-panel { background: #eef2f7; padding: 15px; border-radius: 8px; border: 1px solid #d0d7de; }
+        .action-panel h2 { margin-top: 0; font-size: 1.1rem; }
+        .btn-group { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+        button { padding: 9px 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.9rem; transition: background 0.2s; }
+        .btn-primary { background-color: #007bff; color: white; }
+        .btn-primary:hover { background-color: #0056b3; }
+        .btn-success { background-color: #28a745; color: white; }
+        .btn-success:hover { background-color: #1e7e34; }
+        .btn-outline { background-color: #fff; border: 1px solid #6c757d; color: #333; }
+        .btn-outline:hover { background-color: #f8f9fa; }
+        
+        textarea { width: 100%; height: 90px; margin-top: 10px; padding: 8px; border-radius: 6px; border: 1px solid #ced4da; box-sizing: border-box; font-family: monospace; font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🌊 観測地点 検索・選択ポータル</h1>
+
+    <!-- 検索フォーム -->
+    <div class="search-box">
+        <input type="text" id="searchInput" placeholder="河川名(River) や 所在地(Location)、水系(Basin)で検索..." oninput="filterData()">
+    </div>
+
+    <div class="stats">
+        該当件数: <span id="matchCount">0</span> / 全 <span id="totalCount">0</span> 件
+        ｜ 選択中: <span id="selectedCount" style="color: #007bff;">0</span> 件
+    </div>
+
+    <!-- テーブル表示領域 -->
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 40px;"><input type="checkbox" id="selectAll" onclick="toggleSelectAll(this)"></th>
+                    <th>ID</th>
+                    <th>観測所名 (StationName)</th>
+                    <th>河川名 (River)</th>
+                    <th>水系 (Basin)</th>
+                    <th>所在地 (Location)</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                <tr><td colspan="6" style="text-align: center;">データを読み込み中...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- アクションパネル (結果の取得・出力) -->
+    <div class="action-panel">
+        <h2>選択した観測地点情報の取得・送信</h2>
+        <div class="btn-group">
+            <button class="btn-primary" onclick="exportCSV()">選択データをCSVでダウンロード</button>
+            <button class="btn-success" onclick="copyToClipboard()">テキスト形式でコピー</button>
+            <button class="btn-outline" onclick="openGoogleForm()">Googleフォームへ送信（リンク）</button>
+        </div>
+
+        <textarea id="outputText" readonly placeholder="選択した地点の情報がここに表示されます..."></textarea>
+    </div>
+</div>
+
+<script>
+let allData = [];
+let filteredData = [];
+let selectedStations = new Set(); // 選択されたStationIDを保持
+
+// 1. CSVデータの読み込み
+window.onload = function() {
+    Papa.parse('station_info_sel.csv', {
+        download: true,
+        header: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+            allData = results.data;
+            filteredData = allData;
+            document.getElementById('totalCount').innerText = allData.length;
+            renderTable();
+        },
+        error: function(err) {
+            alert('CSVファイルの読み込みに失敗しました。');
+            console.error(err);
+        }
+    });
+};
+
+// 2. 検索フィルタリング（River, Location, Basin, StationNameを対象）
+function filterData() {
+    const keyword = document.getElementById('searchInput').value.trim().toLowerCase();
+    
+    if (!keyword) {
+        filteredData = allData;
+    } else {
+        filteredData = allData.filter(row => {
+            const river = (row.River || '').toLowerCase();
+            const location = (row.Location || '').toLowerCase();
+            const basin = (row.Basin || '').toLowerCase();
+            const name = (row.StationName || '').toLowerCase();
+            return river.includes(keyword) || location.includes(keyword) || basin.includes(keyword) || name.includes(keyword);
+        });
+    }
+    renderTable();
+}
+
+// 3. テーブルの描画
+function renderTable() {
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = '';
+
+    document.getElementById('matchCount').innerText = filteredData.length;
+
+    if (filteredData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">該当する観測地点が見つかりません</td></tr>';
+        return;
+    }
+
+    filteredData.forEach(row => {
+        const tr = document.createElement('tr');
+        const isChecked = selectedStations.has(row.StationID);
+
+        tr.innerHTML = `
+            <td><input type="checkbox" class="row-checkbox" value="${row.StationID}" ${isChecked ? 'checked' : ''} onchange="handleSelect(this, '${row.StationID}')"></td>
+            <td>${row.StationID || ''}</td>
+            <td><strong>${row.StationName || ''}</strong></td>
+            <td>${row.River || ''}</td>
+            <td>${row.Basin || ''}</td>
+            <td>${row.Location || ''}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    updateSelectedSummary();
+}
+
+// 4. チェックボックスの個別選択
+function handleSelect(cb, id) {
+    if (cb.checked) {
+        selectedStations.add(id);
+    } else {
+        selectedStations.delete(id);
+    }
+    updateSelectedSummary();
+}
+
+// 5. 表示中の全選択/全解除
+function toggleSelectAll(master) {
+    filteredData.forEach(row => {
+        if (master.checked) {
+            selectedStations.add(row.StationID);
+        } else {
+            selectedStations.delete(row.StationID);
+        }
+    });
+    renderTable();
+}
+
+// 6. 選択内容のサマリー更新
+function getSelectedRows() {
+    return allData.filter(row => selectedStations.has(row.StationID));
+}
+
+function updateSelectedSummary() {
+    const selectedRows = getSelectedRows();
+    document.getElementById('selectedCount').innerText = selectedRows.length;
+
+    // 出力用テキストの自動整形
+    const summaryText = selectedRows.map(r => 
+        `[ID: ${r.StationID}] ${r.StationName} (${r.River}水系 / 所在地: ${r.Location})`
+    ).join('\n');
+
+    document.getElementById('outputText').value = summaryText;
+}
+
+// 7-A. CSVエクスポート
+function exportCSV() {
+    const selectedRows = getSelectedRows();
+    if (selectedRows.length === 0) {
+        alert('地点が選択されていません。');
+        return;
+    }
+
+    const csvStr = Papa.unparse(selectedRows);
+    const blob = new Blob(["\uFEFF" + csvStr], { type: 'text/csv;charset=utf-8;' }); // BOM付与で文字化け防止
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'selected_stations.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// 7-B. クリップボードへのコピー
+function copyToClipboard() {
+    const text = document.getElementById('outputText').value;
+    if (!text) {
+        alert('地点が選択されていません。');
+        return;
+    }
+    navigator.clipboard.writeText(text).then(() => {
+        alert('選択した地点情報をクリップボードにコピーしました！');
+    });
+}
+
+// 7-C. Googleフォーム連携 (URLプレフィル)
+function openGoogleForm() {
+    const selectedRows = getSelectedRows();
+    if (selectedRows.length === 0) {
+        alert('地点が選択されていません。');
+        return;
+    }
+
+    // ★自身のGoogleフォームの「事前入力リンクを作成」から取得したURL・entry.XXXXに差し替えてください
+    const formBaseUrl = "https://docs.google.com/forms/d/e/YOUR_FORM_ID/viewform";
+    const entryId = "entry.123456789"; // 送信先質問項目ID
+
+    const ids = selectedRows.map(r => r.StationID).join(',');
+    const targetUrl = `${formBaseUrl}?usp=pp_url&${entryId}=${encodeURIComponent(ids)}`;
+    
+    window.open(targetUrl, '_blank');
+}
+</script>
+
+</body>
+</html>

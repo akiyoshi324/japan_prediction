@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>観測地点 検索・選択ツール</title>
+    <title>日本水文観測地点検索</title>
     <!-- PapaParse (CSV読み込み用) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
@@ -23,12 +23,19 @@
         .action-panel h2 { margin-top: 0; font-size: 1.1rem; }
         .btn-group { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
         button { padding: 9px 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.9rem; transition: background 0.2s; }
-        .btn-primary { background-color: #007bff; color: white; }
-        .btn-primary:hover { background-color: #0056b3; }
-        .btn-success { background-color: #28a745; color: white; }
-        .btn-success:hover { background-color: #1e7e34; }
-        .btn-outline { background-color: #fff; border: 1px solid #6c757d; color: #333; }
-        .btn-outline:hover { background-color: #f8f9fa; }
+        .btn-success { background-color: #007bff; color: white; }
+        .btn-success:hover { background-color: #003e80; }
+        .btn-outline { background-color: #28a745;  color: white; }
+        .btn-outline:hover { background-color: #155724; }
+
+        /* 無効化（disabled）されているボタンのスタイル */
+        button:disabled {
+            background-color: #e9ecef !important;
+            color: #adb5bd !important;
+            border-color: #dee2e6 !important;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
         
         textarea { width: 100%; height: 90px; margin-top: 10px; padding: 8px; border-radius: 6px; border: 1px solid #ced4da; box-sizing: border-box; font-family: monospace; font-size: 0.85rem; }
     </style>
@@ -36,11 +43,11 @@
 <body>
 
 <div class="container">
-    <h1>🌊 観測地点 検索・選択ポータル</h1>
-
+    <h1>観測地点の検索</h1>
+    <p>観測地点情報は水文水質データベースから入手することができます。</p>
     <!-- 検索フォーム -->
     <div class="search-box">
-        <input type="text" id="searchInput" placeholder="河川名(River) や 所在地(Location)、水系(Basin)で検索..." oninput="filterData()">
+        <input type="text" id="searchInput" placeholder="河川名や水系名、所在地を入力..." oninput="filterData()">
     </div>
 
     <div class="stats">
@@ -54,11 +61,11 @@
             <thead>
                 <tr>
                     <th style="width: 40px;"><input type="checkbox" id="selectAll" onclick="toggleSelectAll(this)"></th>
-                    <th>ID</th>
-                    <th>観測所名 (StationName)</th>
-                    <th>河川名 (River)</th>
-                    <th>水系 (Basin)</th>
-                    <th>所在地 (Location)</th>
+                    <th>観測地点ID</th>
+                    <th>観測地点名</th>
+                    <th>河川名</th>
+                    <th>水系名</th>
+                    <th>所在地</th>
                 </tr>
             </thead>
             <tbody id="tableBody">
@@ -69,14 +76,15 @@
 
     <!-- アクションパネル (結果の取得・出力) -->
     <div class="action-panel">
-        <h2>選択した観測地点情報の取得・送信</h2>
+        <h1>観測地点の登録</h1>
+        <p>選択した「観測地点ID」をコピーし、Googleフォームで送信してください</p>
         <div class="btn-group">
-            <button class="btn-primary" onclick="exportCSV()">選択データをCSVでダウンロード</button>
-            <button class="btn-success" onclick="copyToClipboard()">テキスト形式でコピー</button>
-            <button class="btn-outline" onclick="openGoogleForm()">Googleフォームへ送信（リンク）</button>
+            <button class="btn-success" onclick="copyToClipboard()">選択した観測地点IDをコピー</button>
+            <button id="btnGoogleForm" class="btn-outline" onclick="openGoogleForm()" disabled>Googleフォームへ送信（外部リンク）</button>
+            </button>
         </div>
 
-        <textarea id="outputText" readonly placeholder="選択した地点の情報がここに表示されます..."></textarea>
+        <textarea id="outputText" readonly placeholder="選択した観測地点IDの一覧がここに表示されます..."></textarea>
     </div>
 </div>
 
@@ -185,13 +193,55 @@ function updateSelectedSummary() {
 
     // 出力用テキストの自動整形
     const summaryText = selectedRows.map(r => 
-        `[ID: ${r.StationID}] ${r.StationName} (${r.River}水系 / 所在地: ${r.Location})`
-    ).join('\n');
+        `${r.StationID}`
+    ).join(',');
 
     document.getElementById('outputText').value = summaryText;
 }
 
-// 7-A. CSVエクスポート
+// 7. クリップボードへのコピー（またはCSV出力）が行われたか管理するフラグ
+let hasCopied = false;
+
+// ボタンの有効/無効を切り替える関数
+function enableFormButton() {
+    hasCopied = true;
+    const formBtn = document.getElementById('btnGoogleForm');
+    formBtn.disabled = false;
+    formBtn.innerText = "2. Googleフォームへ送信";
+}
+
+// 選択状態が解除されたり変更された場合は再度ボタンを無効化する処理
+function updateSelectedSummary() {
+    const selectedRows = getSelectedRows();
+    document.getElementById('selectedCount').innerText = selectedRows.length;
+
+    const summaryText = selectedRows.map(r => 
+        `${r.StationID}`
+    ).join(',');
+
+    document.getElementById('outputText').value = summaryText;
+
+    // 地点選択が変化したら一度コピー状態をリセットする
+    hasCopied = false;
+    const formBtn = document.getElementById('btnGoogleForm');
+    formBtn.disabled = true;
+    formBtn.innerText = "Googleフォームへ送信（外部リンク）";
+}
+
+// 8. クリップボードへのコピー実行時
+function copyToClipboard() {
+    const text = document.getElementById('outputText').value;
+    if (!text) {
+        alert('地点が選択されていません。');
+        return;
+    }
+    navigator.clipboard.writeText(text).then(() => {
+        alert('選択した地点情報をクリップボードにコピーしました！\nGoogleフォームでコピーした情報を送信してください');
+        enableFormButton(); // ← ここでボタンを有効化
+    });
+}
+
+// 8-2. CSVダウンロード実行時（CSV保存でも送信可とする場合）
 function exportCSV() {
     const selectedRows = getSelectedRows();
     if (selectedRows.length === 0) {
@@ -200,44 +250,36 @@ function exportCSV() {
     }
 
     const csvStr = Papa.unparse(selectedRows);
-    const blob = new Blob(["\uFEFF" + csvStr], { type: 'text/csv;charset=utf-8;' }); // BOM付与で文字化け防止
+    const blob = new Blob(["\uFEFF" + csvStr], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = 'selected_stations.csv';
     a.click();
     URL.revokeObjectURL(url);
+
+    enableFormButton(); // ← CSV保存でもボタンを有効化
 }
 
-// 7-B. クリップボードへのコピー
-function copyToClipboard() {
-    const text = document.getElementById('outputText').value;
-    if (!text) {
-        alert('地点が選択されていません。');
+// 9. Googleフォームへ開く処理
+function openGoogleForm() {
+    // ガード処理: 万が一フラグがfalseの場合は中断
+    if (!hasCopied) {
+        alert('先にクリップボードへのコピー（またはCSVダウンロード）を行ってください。');
         return;
     }
-    navigator.clipboard.writeText(text).then(() => {
-        alert('選択した地点情報をクリップボードにコピーしました！');
-    });
-}
 
-// 7-C. Googleフォーム連携 (URLプレフィル)
-function openGoogleForm() {
     const selectedRows = getSelectedRows();
     if (selectedRows.length === 0) {
         alert('地点が選択されていません。');
         return;
     }
 
-    // ★自身のGoogleフォームの「事前入力リンクを作成」から取得したURL・entry.XXXXに差し替えてください
-    const formBaseUrl = "https://docs.google.com/forms/d/e/YOUR_FORM_ID/viewform";
-    const entryId = "entry.123456789"; // 送信先質問項目ID
-
-    const ids = selectedRows.map(r => r.StationID).join(',');
-    const targetUrl = `${formBaseUrl}?usp=pp_url&${entryId}=${encodeURIComponent(ids)}`;
-    
-    window.open(targetUrl, '_blank');
+    // GoogleフォームのURLを設定
+    const formBaseUrl = "https://docs.google.com/forms/d/e/1FAIpQLSfosvIbq_5STd6o9fsUU4qlNbuBC0EpzHWlHrhMD6a5sgT3zg/viewform?usp=publish-editor";
+    window.open(formBaseUrl, '_blank');
 }
+
 </script>
 
 </body>

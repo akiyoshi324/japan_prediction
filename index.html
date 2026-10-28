@@ -44,7 +44,7 @@
 
 <div class="container">
     <h1>観測地点の検索</h1>
-    <p>観測地点情報は水文水質データベースから入手することができます。</p>
+    <p>観測地点情報は<a href="https://www1.river.go.jp/">水文水質データベース</a>から入手することができます。</p>
     <!-- 検索フォーム -->
     <div class="search-box">
         <input type="text" id="searchInput" placeholder="河川名や水系名、所在地を入力..." oninput="filterData()">
@@ -194,7 +194,7 @@ function updateSelectedSummary() {
     // 出力用テキストの自動整形
     const summaryText = selectedRows.map(r => 
         `${r.StationID}`
-    ).join(',');
+    ).join(', ');
 
     document.getElementById('outputText').value = summaryText;
 }
@@ -217,7 +217,7 @@ function updateSelectedSummary() {
 
     const summaryText = selectedRows.map(r => 
         `${r.StationID}`
-    ).join(',');
+    ).join(', ');
 
     document.getElementById('outputText').value = summaryText;
 
